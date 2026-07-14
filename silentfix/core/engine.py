@@ -80,7 +80,7 @@ class SilentFixPro:
     def _infer_properties(self, func: t.Callable, module_code: str, source: str = "") -> PropertySet:
         func_source = source or self._get_source(func)
         sources = [
-            extract_static_properties(func),
+            extract_static_properties(func, source=func_source),
             extract_type_properties(func),
             mine_dynamic_properties(func),
             retrieve_pattern_properties(func.__name__, func_source),

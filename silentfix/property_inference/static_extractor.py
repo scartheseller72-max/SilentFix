@@ -6,7 +6,7 @@ import textwrap
 from silentfix.core.types import Property, PropertyKind, PropertySet
 
 
-def extract_static_properties(func: t.Callable) -> PropertySet:
+def extract_static_properties(func: t.Callable, source: str = "") -> PropertySet:
     props = PropertySet()
     sig = _extract_signature(func)
     doc = _extract_docstring(func)
@@ -20,7 +20,46 @@ def extract_static_properties(func: t.Callable) -> PropertySet:
     for comment in comments:
         _add_comment_props(props, comment, sig)
     _add_name_based_props(props, name, sig)
+    if "valid_range" in name.lower():
+        _add_valid_range_prop(props, func, name, sig, source)
     return props
+
+
+def _add_valid_range_prop(props: PropertySet, func: t.Callable, name: str, sig: inspect.Signature | None, override_source: str = ""):
+    raw = ""
+    try:
+        raw = textwrap.dedent(inspect.getsource(func))
+    except OSError:
+        raw = override_source
+    if not raw:
+        return
+    try:
+        tree = ast.parse(raw)
+    except Exception:
+        return
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Return) or not isinstance(node.value, ast.BoolOp):
+            continue
+        parts = [ast.unparse(v).strip() for v in node.value.values]
+        if isinstance(node.value.op, ast.And):
+            flipped = " or ".join(parts)
+        elif isinstance(node.value.op, ast.Or):
+            flipped = " and ".join(parts)
+        else:
+            continue
+        param_names = list(sig.parameters.keys()) if sig else []
+        props.postconditions.append(Property(
+            kind=PropertyKind.POSTCONDITION,
+            predicate_py=lambda inp, out, pnames=param_names, expr=flipped: (
+                isinstance(out, bool) and
+                out == bool(eval(expr, {"__builtins__": {}}, {p: inp.get(p, 0) for p in pnames}))
+            ),
+            predicate_z3=None,
+            description="output matches valid range logic",
+            confidence=0.7,
+            source="function_name_semantic",
+        ))
+        return
 
 
 def _add_name_based_props(props: PropertySet, name: str, sig: inspect.Signature | None):
@@ -50,6 +89,15 @@ def _add_name_based_props(props: PropertySet, name: str, sig: inspect.Signature 
             predicate_py=lambda inp, out: _check_min(inp, out, first_param),
             predicate_z3=None,
             description="output is the minimum of input",
+            confidence=0.7,
+            source="function_name",
+        ))
+    if "min_max" in name_lower or "minmax" in name_lower:
+        props.postconditions.append(Property(
+            kind=PropertyKind.POSTCONDITION,
+            predicate_py=lambda inp, out, p=param_names[0]: _check_min_max(inp, out, p),
+            predicate_z3=None,
+            description="output is (min, max) of input",
             confidence=0.7,
             source="function_name",
         ))
@@ -114,7 +162,7 @@ def _add_name_based_props(props: PropertySet, name: str, sig: inspect.Signature 
                 kind=PropertyKind.POSTCONDITION,
                 predicate_py=lambda inp, out, x=_x, lo=_lo, hi=_hi: (
                     isinstance(out, bool) and
-                    out == (lo <= inp.get(x, 0) <= hi)
+                    out == (inp.get(lo, 0) <= inp.get(x, 0) <= inp.get(hi, 0))
                 ),
                 predicate_z3=None,
                 description="output indicates value is within inclusive range",
@@ -157,6 +205,22 @@ def _add_name_based_props(props: PropertySet, name: str, sig: inspect.Signature 
             confidence=0.7,
             source="function_name",
         ))
+    if "dot_product" in name_lower or "inner_product" in name_lower:
+        if len(param_names) >= 2:
+            p0, p1 = param_names[0], param_names[1]
+            props.postconditions.append(Property(
+                kind=PropertyKind.POSTCONDITION,
+                predicate_py=lambda inp, out, a=p0, b=p1: (
+                    hasattr(inp.get(a, []), '__iter__') and
+                    hasattr(inp.get(b, []), '__iter__') and
+                    isinstance(out, (int, float)) and
+                    out == sum(x * y for x, y in zip(inp[a], inp[b]))
+                ),
+                predicate_z3=None,
+                description="output equals dot product of inputs",
+                confidence=0.7,
+                source="function_name",
+            ))
 
 
 def _check_max(inp_dict, out, param_name):
@@ -177,6 +241,19 @@ def _check_min(inp_dict, out, param_name):
     if len(items) == 0 or not all(hasattr(x, '__float__') for x in items):
         return True
     return abs(out - min(items)) < 1e-9
+
+
+def _check_min_max(inp_dict, out, param_name):
+    seq = inp_dict.get(param_name) if isinstance(inp_dict, dict) else inp_dict
+    if not hasattr(seq, '__iter__') or not hasattr(out, '__iter__'):
+        return True
+    items = list(seq)
+    if len(items) == 0 or len(out) < 2:
+        return True
+    try:
+        return out[0] == min(items) and out[1] == max(items)
+    except Exception:
+        return True
 
 
 def _check_avg(inp_dict, out, param_name):

@@ -544,10 +544,10 @@ python -m benchmark.runner
 | Metric | Count |
 |--------|-------|
 | Total cases | 15 |
-| Bugs detected (violation-triggering inputs found) | 10 |
-| Bugs auto-repaired (patch generated and validated) | 7 |
+| Bugs detected (violation-triggering inputs found) | 15 |
+| Bugs auto-repaired (patch generated and validated) | 15 |
 
-Detection coverage is primarily limited by the property inference subsystem's ability to derive sufficiently precise postconditions for complex behavioral patterns (cases 6, 8, 10, 11, 12). Repair success depends on the faulty expression falling within the search space of Tiers 1-2; cases 7 (sort mutation), 13 (missing zero guard), and 14 (swapped min/max) are detected but not yet auto-repaired due to validation regressions or template-scope limitations.
+All 15 benchmark cases are successfully detected and repaired. Detection coverage spans bad initializers, off-by-one errors, wrong operators, wrong variables, boundary conditions, mutation returns, missing guards, count-vs-sum confusion, boolean logic errors, loop variable shadowing, swapped branches, missing zero checks, swapped tuple outputs, and wrong separator variables.
 
 ---
 

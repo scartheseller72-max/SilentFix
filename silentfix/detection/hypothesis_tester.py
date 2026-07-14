@@ -128,6 +128,6 @@ def _test_one_property(
             if post.predicate_py and not post.predicate_py(inp_dict, out):
                 failures.append((call_args, {}))
         except Exception:
-            pass
+            failures.append((call_args, {}))
 
     return failures[:50]
