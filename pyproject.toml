@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "silentfix"
+version = "0.1.0"
+description = "Automated detection, localization, and repair of silent logic errors in Python"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = [
+    "z3-solver>=4.12.0",
+    "hypothesis>=6.80.0",
+    "torch>=2.0.0",
+    "transformers>=4.30.0",
+    "scikit-learn>=1.3.0",
+    "libcst>=1.0.0",
+    "pydantic>=2.0.0",
+    "openai>=1.0.0",
+    "httpx>=0.24.0",
+    "sentence-transformers>=2.2.0",
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "numpy>=1.24.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+    "black>=23.0.0",
+]
+
+[project.scripts]
+silentfix = "silentfix.main:cli"
+
+[tool.setuptools.packages.find]
+include = ["silentfix*"]
