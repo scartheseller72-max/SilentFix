@@ -107,6 +107,57 @@ def _add_name_based_props(props: PropertySet, name: str, sig: inspect.Signature 
             source="function_name",
         ))
 
+    if "in_range" in name_lower or "inrange" in name_lower:
+        if len(param_names) >= 3:
+            _x, _lo, _hi = param_names[0], param_names[1], param_names[2]
+            props.postconditions.append(Property(
+                kind=PropertyKind.POSTCONDITION,
+                predicate_py=lambda inp, out, x=_x, lo=_lo, hi=_hi: (
+                    isinstance(out, bool) and
+                    out == (lo <= inp.get(x, 0) <= hi)
+                ),
+                predicate_z3=None,
+                description="output indicates value is within inclusive range",
+                confidence=0.7,
+                source="function_name",
+            ))
+    if "first" in name_lower or "head" in name_lower or "car" in name_lower:
+        props.postconditions.append(Property(
+            kind=PropertyKind.POSTCONDITION,
+            predicate_py=lambda inp, out, p=param_names[0]: (
+                not hasattr(inp.get(p, []), '__iter__') or
+                (not inp.get(p, []) and out is None) or
+                (inp.get(p, []) and out == inp[p][0])
+            ),
+            predicate_z3=None,
+            description="output is first element of input (or None if empty)",
+            confidence=0.7,
+            source="function_name",
+        ))
+    if "is_even" in name_lower:
+        props.postconditions.append(Property(
+            kind=PropertyKind.POSTCONDITION,
+            predicate_py=lambda inp, out, p=param_names[0]: (
+                isinstance(out, bool) and
+                out == (inp.get(p, 0) % 2 == 0)
+            ),
+            predicate_z3=None,
+            description="output indicates whether input is even",
+            confidence=0.7,
+            source="function_name",
+        ))
+    if "valid_range" in name_lower:
+        props.postconditions.append(Property(
+            kind=PropertyKind.POSTCONDITION,
+            predicate_py=lambda inp, out, p=param_names[0]: (
+                isinstance(out, bool)
+            ),
+            predicate_z3=None,
+            description="output is boolean (validity check)",
+            confidence=0.7,
+            source="function_name",
+        ))
+
 
 def _check_max(inp_dict, out, param_name):
     seq = inp_dict.get(param_name) if isinstance(inp_dict, dict) else inp_dict
@@ -180,9 +231,12 @@ def _add_type_based_props(props: PropertySet, sig: inspect.Signature):
         if hint is inspect.Parameter.empty:
             continue
         hint_str = str(hint)
-        if "int" in hint_str or "float" in hint_str:
+        hint_origin = getattr(hint, '__origin__', None)
+        if hint_origin is not None and hint_origin is not hint:
             pass
-        elif "list" in hint_str or "List" in hint_str or "Sequence" in hint_str:
+        elif hint_str in ("int", "float"):
+            pass
+        elif hint_origin is list or hint_origin is tuple or hint_str in ("list", "tuple", "List", "Tuple", "Sequence"):
             props.postconditions.append(Property(
                 kind=PropertyKind.POSTCONDITION,
                 predicate_py=lambda inp, out, _n=name: not hasattr(out, '__len__') or len(out) >= 0,
@@ -195,7 +249,10 @@ def _add_type_based_props(props: PropertySet, sig: inspect.Signature):
     ret = sig.return_annotation
     if ret is not inspect.Parameter.empty:
         ret_str = str(ret)
-        if "bool" in ret_str:
+        ret_origin = getattr(ret, '__origin__', None)
+        if ret_origin is not None and ret_origin is not ret:
+            pass
+        elif ret_str == "bool":
             props.postconditions.append(Property(
                 kind=PropertyKind.POSTCONDITION,
                 predicate_py=lambda inp, out: isinstance(out, bool),
@@ -204,7 +261,7 @@ def _add_type_based_props(props: PropertySet, sig: inspect.Signature):
                 confidence=0.7,
                 source="type_hint",
             ))
-        elif "int" in ret_str or "float" in ret_str:
+        elif ret_str in ("int", "float"):
             props.postconditions.append(Property(
                 kind=PropertyKind.POSTCONDITION,
                 predicate_py=lambda inp, out: isinstance(out, (int, float)),

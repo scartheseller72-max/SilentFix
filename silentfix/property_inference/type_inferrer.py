@@ -16,11 +16,27 @@ def extract_type_properties(func: t.Callable) -> PropertySet:
         return props
 
     ret_str = str(ret)
+    ret_origin = getattr(ret, '__origin__', None)
+    is_generic = ret_origin is not None and ret_origin is not ret
 
-    if "list" in ret_str or "List" in ret_str or "Sequence" in ret_str or "tuple" in ret_str or "Tuple" in ret_str:
+    if is_generic:
+        if ret_origin in (list, tuple, set, frozenset):
+            props.postconditions.append(Property(
+                kind=PropertyKind.POSTCONDITION,
+                predicate_py=lambda inp, out: hasattr(out, '__iter__'),
+                predicate_z3=None,
+                description="Return type is iterable",
+                confidence=0.7,
+                source="type_inference",
+            ))
+        return props
+
+    if ret_str in ("list", "tuple", "List", "Tuple", "Sequence", "set", "dict"):
         for name, param in sig.parameters.items():
             param_str = str(param.annotation)
-            if "list" in param_str or "List" in param_str or "Sequence" in param_str:
+            param_origin = getattr(param.annotation, '__origin__', None)
+            param_is_generic = param_origin is not None and param_origin is not param.annotation
+            if not param_is_generic and ("list" in param_str or "List" in param_str or "Sequence" in param_str):
                 props.postconditions.append(Property(
                     kind=PropertyKind.POSTCONDITION,
                     predicate_py=lambda inp, out, _n=name: (
@@ -43,17 +59,7 @@ def extract_type_properties(func: t.Callable) -> PropertySet:
             source="type_inference",
         ))
 
-    if "dict" in ret_str or "Dict" in ret_str or "Mapping" in ret_str:
-        props.postconditions.append(Property(
-            kind=PropertyKind.POSTCONDITION,
-            predicate_py=lambda inp, out: isinstance(out, dict),
-            predicate_z3=None,
-            description="Return type is dict",
-            confidence=0.6,
-            source="type_inference",
-        ))
-
-    if "bool" in ret_str:
+    if ret_str == "bool":
         props.postconditions.append(Property(
             kind=PropertyKind.POSTCONDITION,
             predicate_py=lambda inp, out: isinstance(out, bool),
@@ -63,7 +69,7 @@ def extract_type_properties(func: t.Callable) -> PropertySet:
             source="type_inference",
         ))
 
-    if "int" in ret_str:
+    if ret_str == "int":
         props.postconditions.append(Property(
             kind=PropertyKind.POSTCONDITION,
             predicate_py=lambda inp, out: isinstance(out, int),
@@ -73,7 +79,7 @@ def extract_type_properties(func: t.Callable) -> PropertySet:
             source="type_inference",
         ))
 
-    if "float" in ret_str:
+    if ret_str == "float":
         props.postconditions.append(Property(
             kind=PropertyKind.POSTCONDITION,
             predicate_py=lambda inp, out: isinstance(out, (int, float)),

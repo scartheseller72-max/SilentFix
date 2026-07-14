@@ -55,6 +55,10 @@ def _try_line_templates(source: str, line_no: int) -> list[Patch]:
         ("bad_initializer", _fix_bad_initializer),
         ("sort_mutation", _fix_sort_mutation),
         ("swapped_min_max", _fix_swapped_min_max),
+        ("first_element_guard", _fix_first_element_guard),
+        ("wrong_return_branch", _fix_wrong_return_branch),
+        ("comparison_boundary", _fix_comparison_boundary),
+        ("boolean_and_or", _fix_boolean_and_or),
     ]
 
     for name, fix_fn in templates:
@@ -242,6 +246,40 @@ def _fix_swapped_min_max(line: str) -> str | None:
     return None
 
 
+def _fix_first_element_guard(line: str) -> str | None:
+    m = re.search(r'return\s+(\w+)\[0\]', line)
+    if m and "if" not in line:
+        var = m.group(1)
+        return line.replace(m.group(0), f"return {var}[0] if {var} else None")
+    return None
+
+
+def _fix_wrong_return_branch(line: str) -> str | None:
+    if "return True" in line:
+        return line.replace("return True", "return False")
+    if "return False" in line:
+        return line.replace("return False", "return True")
+    return None
+
+
+def _fix_comparison_boundary(line: str) -> str | None:
+    m = re.search(r'return\s+(\w+)\s*<\s*(\w+)\s*<\s*(\w+)', line)
+    if m:
+        x, lo, hi = m.group(1), m.group(2), m.group(3)
+        return line.replace(m.group(0), f"return {lo} <= {x} <= {hi}")
+    return None
+
+
+def _fix_boolean_and_or(line: str) -> str | None:
+    if "return" in line and "and" in line:
+        if "or" not in line:
+            m = re.search(r'return\s+(.+?)\s+and\s+(.+?)\s*$', line)
+            if m:
+                left, right = m.group(1), m.group(2)
+                return line.replace(m.group(0), f"return {left} or {right}")
+    return None
+
+
 def _get_loop_var_for_line(func_node: ast.FunctionDef, line_no: int) -> str | None:
     for node in ast.walk(func_node):
         if isinstance(node, ast.For):
@@ -298,7 +336,7 @@ def _fix_missing_guard(
     m = re.search(r'return\s+(\w+)\s*/\s*(\w+)', stripped)
     if m:
         denom = m.group(2)
-        guard = f"if {denom} == 0:\n{indent}    return float('inf')"
+        guard = f"{indent}if {denom} == 0:\n{indent}    return float('inf')"
         patched = lines[:]
         patched.insert(line_no - 1, guard)
         diff = "\n".join(patched)

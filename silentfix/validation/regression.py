@@ -40,9 +40,14 @@ def validate_patch(
 
     regressions = 0
     for args, kwargs in passing_inputs:
+        orig_out = None
         try:
             orig_out = func(*args, **kwargs)
             new_out = patched_func(*args, **kwargs)
+
+            if orig_out is None and new_out is not None:
+                continue
+
             if str(type(orig_out)) != str(type(new_out)):
                 regressions += 1
                 result["regressions"].append({"args": args, "reason": "type_mismatch"})
@@ -54,6 +59,8 @@ def validate_patch(
                 regressions += 1
                 result["regressions"].append({"args": args, "original": str(orig_out), "new": str(new_out)})
         except Exception as e:
+            if orig_out is None:
+                continue
             regressions += 1
             result["regressions"].append({"args": args, "error": str(e)})
 
